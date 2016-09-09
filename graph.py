@@ -25,8 +25,8 @@ style.use("seaborn-whitegrid")
 
 fig = Figure(figsize=(5, 4), dpi=100)
 subplt1 = fig.add_subplot(111)  # (rows, columns, plot_no)
-# subplt2 = fig.add_subplot(122)
-subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
+subplt2 = fig.add_subplot(122)
+# subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
 # further setting inside GraphPage class
 
 
@@ -123,11 +123,11 @@ class GraphPage(tk.Frame):
         data = self.generate_data()
         ft = np.fft.fft(data)
 
-        subplt1.plot(np.real(ft))
-        subplt1.set_title("Real part", fontsize=12)
+        # subplt1.plot(np.real(ft))
+        # subplt1.set_title("Real part", fontsize=12)
         subplt2.plot(np.imag(ft), color='green')
         subplt2.set_title("Imaginary part", fontsize=12)
-        # subplt.ylabel('FFT - real part')
+        # subplt.ylabel('FFT')
 
         canvas = FigureCanvasTkAgg(fig, self)
         canvas.show()
@@ -150,7 +150,8 @@ def main():
     # data = generate_data()
     # show_fft(data)
 
-    animation.FuncAnimation(fig, animate, interval=1000)
+    ani = animation.FuncAnimation(fig, animate, interval=1000)
+    ani.interval = 1200
     app.mainloop()
 
 if __name__ == "__main__":
