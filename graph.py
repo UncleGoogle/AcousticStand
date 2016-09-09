@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from PIL import ImageTk  # for png, jpg ect support
-from random import random  # https://docs.python.org/2/library/random.html
+from random import uniform
 
 import matplotlib
 matplotlib.use('TkAgg')  # set backend - next time use your own window
@@ -24,25 +24,46 @@ style.use("seaborn-whitegrid")
 # seaborn-pastel seaborn-poster seaborn-talk seaborn-ticks seaborn-whitegrid
 
 fig = Figure(figsize=(5, 5), dpi=100)
-subplt1 = fig.add_subplot(111)  # (rows, columns, plot_no)
+fig.suptitle("FFT of out data", fontsize=14)
+subplt1 = fig.add_subplot(121)  # (rows, columns, plot_no)
+subplt1.set_title("Real part", fontsize=12)
+
+# defaultbg = self.cget('bg')
+# fig = Figure(figsize=(5, 5), dpi=100, facecolor=defaultbg)
+# fig.facecolor = defaultbg
 # subplt2 = fig.add_subplot(122)
-subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
-# further setting inside GraphPage class
+# subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
+# subplt2.plot(np.imag(ft), color='green')
+# subplt2.set_title("Imaginary part", fontsize=12)
 
 
 def animate(i):
-    f = open('example_data.txt')
+
+    # data = self.generate_data()
+    # ft = np.fft.fft(data)
+    # subplt1.plot(np.real(ft))
+
+    # open a file for reading and then appendding (for develop purpose)
+    f = open('sample_data.txt', 'r+')
     data = f.read()
     lines = data.split('\n')
     xpl = []
     ypl = []
+    i = 0
     for line in lines:
         if len(line) > 1:
-            x, y = line.split(',')
-            xpl.append(x)
-            ypl.append(y)
+            ypl.append(line)
+            xpl.append(i)
+            i += 1
+    ft = np.fft.fft(ypl)
     subplt1.clear()
-    subplt1.plot(xpl, ypl)
+    subplt1.plot(xpl, ft)
+
+    f.write(str(uniform(0, 3.3)))
+    f.write('\n')
+    f.seek(0)  # set pointer to te start of file
+    f.close()
+
 
 class AcousticStand(tk.Tk):
 
@@ -114,41 +135,24 @@ class GraphPage(tk.Frame):
             command=lambda: controller.show_frame(StartPage))
         button_home.pack(side=tk.BOTTOM)
 
-        fig.suptitle("FFT of out data", fontsize=14)
-        defaultbg = self.cget('bg')
-        # fig = Figure(figsize=(5, 5), dpi=100, facecolor=defaultbg)
-        fig.facecolor = defaultbg
-
-        data = self.generate_data()
-        ft = np.fft.fft(data)
-
-        # subplt1.plot(np.real(ft))
-        subplt1.set_title("Real part", fontsize=12)
-        subplt2.plot(np.imag(ft), color='green')
-        subplt2.set_title("Imaginary part", fontsize=12)
-        # subplt.ylabel('FFT')
-
         canvas = FigureCanvasTkAgg(fig, self)
         canvas.show()
-        # canvas.get_tk_widget().pack(side=tk.BOTTOM)  # unwanted effect
+        canvas.get_tk_widget().pack(side=tk.BOTTOM)  # unwanted effect
 
         toolbar = NavigationToolbar2TkAgg(canvas, self)
         toolbar.update()
         canvas._tkcanvas.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-    def generate_data(self):
-        # generate random data
-        data = []
-        for i in range(10):
-            data.append(random())
-        return data
+    # def generate_data(self):
+        # # generate random data
+        # data = []
+        # for i in range(10):
+            # data.append(random())
+        # return data
 
 
 def main():
     app = AcousticStand()
-    # data = generate_data()
-    # show_fft(data)
-
     ani = animation.FuncAnimation(fig, animate, interval=1000)
     ani.interval = 1200
     app.mainloop()
