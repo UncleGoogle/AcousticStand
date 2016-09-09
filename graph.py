@@ -13,32 +13,36 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2TkAgg)
 from matplotlib.figure import Figure
 from matplotlib import style
-# import matplotlib.animation as animation
+import matplotlib.animation as animation
 
 
 BIG_FONT = ("Verdana", 12)
 style.use("seaborn-whitegrid")
-# bmh
-# classic
-# dark_background
-# fivethirtyeight
-# ggplot
-# grayscale
-# seaborn-bright
-# seaborn-colorblind
-# seaborn-darkgrid
-# seaborn-dark
-# seaborn-dark-palette
-# seaborn-deep
-# seaborn-muted
-# seaborn-notebook
-# seaborn-paper
-# seaborn-pastel
-# seaborn-poster
-# seaborn-talk
-# seaborn-ticks
-# seaborn-whitegrid
-# seaborn-white
+# bmh classic dark_background fivethirtyeight ggplot grayscale seaborn-white
+# seaborn-bright seaborn-colorblind seaborn-darkgrid seaborn-dark
+# seaborn-dark-palette seaborn-deep seaborn-muted seaborn-notebook seaborn-paper
+# seaborn-pastel seaborn-poster seaborn-talk seaborn-ticks seaborn-whitegrid
+
+fig = Figure(figsize=(5, 4), dpi=100)
+subplt1 = fig.add_subplot(111)  # (rows, columns, plot_no)
+# subplt2 = fig.add_subplot(122)
+subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
+# further setting inside GraphPage class
+
+
+def animate(i):
+    f = open('example_data.txt')
+    data = f.read()
+    lines = data.split('\n')
+    xpl = []
+    ypl = []
+    for line in lines:
+        if len(line) > 1:
+            x, y = line.split(',')
+            xpl.append(x)
+            ypl.append(y)
+    subplt1.clear()
+    subplt1.plot(xpl, ypl)
 
 
 class AcousticStand(tk.Tk):
@@ -111,13 +115,10 @@ class GraphPage(tk.Frame):
             command=lambda: controller.show_frame(StartPage))
         button_home.pack(side=tk.BOTTOM)
 
-        defaultbg = self.cget('bg')
-        fig = Figure(figsize=(5, 5), dpi=100, facecolor=defaultbg)
         fig.suptitle("FFT of out data", fontsize=14)
-
-        subplt1 = fig.add_subplot(121)  # (rows, columns, plot_no)
-        # subplt2 = fig.add_subplot(122)
-        subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
+        defaultbg = self.cget('bg')
+        # fig = Figure(figsize=(5, 5), dpi=100, facecolor=defaultbg)
+        fig.facecolor = defaultbg
 
         data = self.generate_data()
         ft = np.fft.fft(data)
@@ -146,10 +147,10 @@ class GraphPage(tk.Frame):
 
 def main():
     app = AcousticStand()
-
     # data = generate_data()
     # show_fft(data)
 
+    animation.FuncAnimation(fig, animate, interval=1000)
     app.mainloop()
 
 if __name__ == "__main__":
