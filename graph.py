@@ -23,10 +23,10 @@ style.use("seaborn-whitegrid")
 # seaborn-dark-palette seaborn-deep seaborn-muted seaborn-notebook seaborn-paper
 # seaborn-pastel seaborn-poster seaborn-talk seaborn-ticks seaborn-whitegrid
 
-fig = Figure(figsize=(5, 4), dpi=100)
+fig = Figure(figsize=(5, 5), dpi=100)
 subplt1 = fig.add_subplot(111)  # (rows, columns, plot_no)
-subplt2 = fig.add_subplot(122)
-# subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
+# subplt2 = fig.add_subplot(122)
+subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
 # further setting inside GraphPage class
 
 
@@ -43,7 +43,6 @@ def animate(i):
             ypl.append(y)
     subplt1.clear()
     subplt1.plot(xpl, ypl)
-
 
 class AcousticStand(tk.Tk):
 
@@ -124,7 +123,7 @@ class GraphPage(tk.Frame):
         ft = np.fft.fft(data)
 
         # subplt1.plot(np.real(ft))
-        # subplt1.set_title("Real part", fontsize=12)
+        subplt1.set_title("Real part", fontsize=12)
         subplt2.plot(np.imag(ft), color='green')
         subplt2.set_title("Imaginary part", fontsize=12)
         # subplt.ylabel('FFT')
