@@ -1,21 +1,22 @@
 import os
-import numpy as np
+import io
 import tkinter as tk
 from tkinter import ttk
+import numpy as np
 
 from PIL import ImageTk  # for png, jpg ect support
-from random import uniform
+from random import randrange
 
+from multiprocessing import Process, Queue
 import matplotlib
-matplotlib.use('TkAgg')  # set backend - next time use your own window
-# from pyFFTW import fft # TODO the best fft is fftw based on C
-from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
-                                               NavigationToolbar2TkAgg)
+matplotlib.use('TkAgg')  # set backend
 from matplotlib.figure import Figure
 from matplotlib import style
 import matplotlib.animation as animation
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
+                                               NavigationToolbar2TkAgg)
 
-
+BITS = 16
 BIG_FONT = ("Verdana", 12)
 style.use("seaborn-whitegrid")
 # bmh classic dark_background fivethirtyeight ggplot grayscale seaborn-white
@@ -26,26 +27,59 @@ style.use("seaborn-whitegrid")
 fig = Figure(figsize=(5, 5), dpi=100)
 fig.suptitle("FFT of out data", fontsize=14)
 subplt1 = fig.add_subplot(121)  # (rows, columns, plot_no)
-subplt1.set_title("Real part", fontsize=12)
+subplt1.set_title("microfon_1", fontsize=12)
+subplt2 = fig.add_subplot(122)
+subplt2.set_title("microfon_2: Reference", fontsize=12)
 
 # defaultbg = self.cget('bg')
 # fig = Figure(figsize=(5, 5), dpi=100, facecolor=defaultbg)
-# fig.facecolor = defaultbg
-# subplt2 = fig.add_subplot(122)
 # subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
 # subplt2.plot(np.imag(ft), color='green')
-# subplt2.set_title("Imaginary part", fontsize=12)
 
 
 def animate(i):
+    ''' open data file for reading (develop: and generate sample data)
+    perform fft in separate processess and draw plots '''
 
-    # data = self.generate_data()
-    # ft = np.fft.fft(data)
-    # subplt1.plot(np.real(ft))
+    # load random quatisized sample (see sample_base.py)
+    # TODO move below to initialization function
+    with open('sample_base.txt', 'r') as g:
+        gData = g.read()
+        base_list = gData.split()
 
-    # open a file for reading and then appendding (for develop purpose)
-    f = open('sample_data.txt', 'r+')
-    data = f.read()
+    with open('sample_data.txt', 'a+') as f:  # final ver: 'r'
+        # generate 100 random samples between each drawing step
+        for k in range(10):
+            castInt = randrange(0, 2**BITS)
+            f.write(str(base_list[castInt]))
+            f.write('\n')
+        try:
+            f.seek(-500, 2)  # last x bites
+        except io.UnsupportedOperation:
+            f.seek(0, 0)  # set pointer to the begging of the file
+        data = f.read()
+
+    q1 = Queue()
+    q2 = Queue()
+    p1 = Process(target=doFFT, name='fft_1', args=(data, q1))
+    p2 = Process(target=doFFT, name='fft_2', args=(data, q2))  # data2
+    p1.start()
+    p2.start()
+    p1.join()  # wait untill process terminate
+    p2.join()
+
+    x1, y1, x2, y2 = ([], [], [], [])
+    # maybe make numpy.array if they will be big - for efficiency TODO
+    x1, y1 = q1.get()
+    x2, y2 = q2.get()
+    subplt1.clear()
+    subplt1.plot(x1, y1)
+    subplt2.clear()
+    subplt2.plot(x2, y2)
+
+
+def doFFT(data, queue):
+    ''' read data and perform fft '''
     lines = data.split('\n')
     xpl = []
     ypl = []
@@ -56,13 +90,7 @@ def animate(i):
             xpl.append(i)
             i += 1
     ft = np.fft.fft(ypl)
-    subplt1.clear()
-    subplt1.plot(xpl, ft)
-
-    f.write(str(uniform(0, 3.3)))
-    f.write('\n')
-    f.seek(0)  # set pointer to te start of file
-    f.close()
+    queue.put((xpl, ft))
 
 
 class AcousticStand(tk.Tk):
@@ -143,18 +171,11 @@ class GraphPage(tk.Frame):
         toolbar.update()
         canvas._tkcanvas.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-    # def generate_data(self):
-        # # generate random data
-        # data = []
-        # for i in range(10):
-            # data.append(random())
-        # return data
-
 
 def main():
     app = AcousticStand()
     ani = animation.FuncAnimation(fig, animate, interval=1000)
-    ani.interval = 1200
+    ani.interval = 1001
     app.mainloop()
 
 if __name__ == "__main__":
