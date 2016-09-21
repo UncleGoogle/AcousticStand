@@ -1,20 +1,21 @@
 import os
-import io
+import numpy as np
+import random
+# import scipy.stats as st
+# import math
 import tkinter as tk
 from tkinter import ttk
-import numpy as np
 
-from PIL import ImageTk  # for png, jpg ect support
-from random import randrange
+from PIL import ImageTk  # Pillow
+from collections import deque
 
+import pyfftw
 from multiprocessing import Process, Queue
-import matplotlib
-matplotlib.use('TkAgg')  # set backend
+from matplotlib import style, use, animation
 from matplotlib.figure import Figure
-from matplotlib import style
-import matplotlib.animation as animation
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2TkAgg)
+use('TkAgg')  # mpl: set backend
 
 BITS = 16
 BIG_FONT = ("Verdana", 12)
@@ -25,16 +26,9 @@ style.use("seaborn-whitegrid")
 # seaborn-pastel seaborn-poster seaborn-talk seaborn-ticks seaborn-whitegrid
 
 fig = Figure(figsize=(5, 5), dpi=100)
-fig.suptitle("FFT of out data", fontsize=14)
-subplt1 = fig.add_subplot(121)  # (rows, columns, plot_no)
-subplt1.set_title("microfon_1", fontsize=12)
+fig.suptitle("FFT of our data", fontsize=14)
+subplt1 = fig.add_subplot(121)  # (rows columns plot_no)
 subplt2 = fig.add_subplot(122)
-subplt2.set_title("microfon_2: Reference", fontsize=12)
-
-# defaultbg = self.cget('bg')
-# fig = Figure(figsize=(5, 5), dpi=100, facecolor=defaultbg)
-# subplt2 = fig.add_axes([0.58, 0.2, 0.4, 0.65])  # [left, bottom, w, h]
-# subplt2.plot(np.imag(ft), color='green')
 
 
 def animate(i):
@@ -46,19 +40,27 @@ def animate(i):
     with open('sample_base.txt', 'r') as g:
         gData = g.read()
         base_list = gData.split()
+        # class my_pdf(st.rv_continuous):
+        #     def _pdf(self, x):
+        #         return math.sin(x)
+        # my_cv = my_pdf(a=0, b=2**BITS, name='sin_pdf')
+        # develop:
+        with open('sample_data.txt', 'a') as f:
+            # generate 100 random samples between each drawing step
 
-    with open('sample_data.txt', 'a+') as f:  # final ver: 'r'
-        # generate 100 random samples between each drawing step
-        for k in range(10):
-            castInt = randrange(0, 2**BITS)
-            f.write(str(base_list[castInt]))
-            f.write('\n')
-        try:
-            f.seek(-500, 2)  # last x bites
-        except io.UnsupportedOperation:
-            f.seek(0, 0)  # set pointer to the begging of the file
-        data = f.read()
+            for k in range(60):
+                castInt = int(random.gauss(2**BITS/2, 2**BITS/10))  # dev
+                if castInt < 0:
+                    castInt = 0
+                elif castInt > 2**BITS-1:
+                    castInt = 2**BITS-1
+                f.write(str(base_list[castInt]))
+                f.write('\n')
+                # f.write(str(2 + math.sin(2*math.pi**k)))
 
+    with open('sample_data.txt', 'r') as f:
+        f.seek(0)
+        data = deque(f, 1000)  # read and storage the last 100 lines
     q1 = Queue()
     q2 = Queue()
     p1 = Process(target=doFFT, name='fft_1', args=(data, q1))
@@ -67,30 +69,50 @@ def animate(i):
     p2.start()
     p1.join()  # wait untill process terminate
     p2.join()
+    y1 = q1.get()
+    y2 = q2.get()
 
-    x1, y1, x2, y2 = ([], [], [], [])
-    # maybe make numpy.array if they will be big - for efficiency TODO
-    x1, y1 = q1.get()
-    x2, y2 = q2.get()
-    subplt1.clear()
-    subplt1.plot(x1, y1)
+    subplt1.clear()  # break axex tiles :(
+    subplt1.plot(y1)
     subplt2.clear()
-    subplt2.plot(x2, y2)
+    subplt2.plot(y2)
+
+    subplt1.set_title("microfon_1", fontsize=12)
+    subplt2.set_title("microfon_2: Reference", fontsize=12)
+
+    # matplotlib: axes properties & function TODO:
+    # subplt1.relim()
+    # update ax.viewLim using the new dataLim
+    # subplt1.autoscale_view()
 
 
 def doFFT(data, queue):
-    ''' read data and perform fft '''
-    lines = data.split('\n')
-    xpl = []
-    ypl = []
-    i = 0
-    for line in lines:
-        if len(line) > 1:
-            ypl.append(line)
-            xpl.append(i)
-            i += 1
-    ft = np.fft.fft(ypl)
-    queue.put((xpl, ft))
+    ''' read data and perform real one dimensional fft
+        return the transform magnitude
+    '''
+    # -version for data = f.read()
+    # ypl = []
+    # lines = data.split('\n')
+    # for line in lines:
+    #    if len(line) > 1:
+    #         ypl.appeetup="import pyfftw; \
+
+    # -version for numpy fft and deque:
+    # ft = np.fft.fft(data)
+    # yar = asarray(ft, dtype=np.float16)
+    # queue.put(yar)
+
+    # -vesion for pyfftw and deque:
+    # initialize empty output array (real -> complex fft)
+    x = np.asarray(data, dtype=np.float32)
+    input = pyfftw.empty_aligned(x.shape[0], dtype=np.float32)
+    ft = pyfftw.empty_aligned(x.shape[0]//2+1, dtype=np.complex64)
+    fft_obj = pyfftw.FFTW(input, ft)
+    input[:] = x
+    fft_obj()  # __init__ has update_arrays(in, out) and execute()
+
+    magnitude = np.abs(ft)
+    queue.put(magnitude)
 
 
 class AcousticStand(tk.Tk):
@@ -157,6 +179,9 @@ class GraphPage(tk.Frame):
         tk.Frame.__init__(self, parent)
         label = tk.Label(self, text="Graph Page", font=BIG_FONT)
         label.pack(pady=10, padx=10)
+
+        defaultbg = self.cget('bg')  # self -> from AcousticStand class
+        fig.set_facecolor(defaultbg)
 
         button_home = ttk.Button(
             self, text="Back to Home",
