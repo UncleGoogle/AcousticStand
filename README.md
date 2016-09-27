@@ -1,4 +1,5 @@
-# AcousticStandWork
+# AcousticStand
 
- in progres...
- wait for alpha realise
+A device to detect acoustic signals and perform speach detection.
+
+Work in progres.

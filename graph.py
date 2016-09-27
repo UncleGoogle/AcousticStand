@@ -27,8 +27,12 @@ style.use("seaborn-whitegrid")
 
 fig = Figure(figsize=(5, 5), dpi=100)
 fig.suptitle("FFT of our data", fontsize=14)
-subplt1 = fig.add_subplot(121)  # (rows columns plot_no)
+subplt1 = fig.add_subplot(121, autoscaley_on=True, xlabel='Hz')  # (rows columns plot_no)
 subplt2 = fig.add_subplot(122)
+
+
+def init():
+    pass
 
 
 def animate(i):
@@ -40,14 +44,8 @@ def animate(i):
     with open('sample_base.txt', 'r') as g:
         gData = g.read()
         base_list = gData.split()
-        # class my_pdf(st.rv_continuous):
-        #     def _pdf(self, x):
-        #         return math.sin(x)
-        # my_cv = my_pdf(a=0, b=2**BITS, name='sin_pdf')
-        # develop:
         with open('sample_data.txt', 'a') as f:
-            # generate 100 random samples between each drawing step
-
+            # generate 100 random samples between each drawing
             for k in range(60):
                 castInt = int(random.gauss(2**BITS/2, 2**BITS/10))  # dev
                 if castInt < 0:
@@ -57,6 +55,10 @@ def animate(i):
                 f.write(str(base_list[castInt]))
                 f.write('\n')
                 # f.write(str(2 + math.sin(2*math.pi**k)))
+
+    subplt1.set_title("microfon_1", fontsize=12)
+    subplt2.set_title("microfon_2: Reference", fontsize=12)
+
 
     with open('sample_data.txt', 'r') as f:
         f.seek(0)
@@ -72,13 +74,10 @@ def animate(i):
     y1 = q1.get()
     y2 = q2.get()
 
-    subplt1.clear()  # break axex tiles :(
+    subplt1.cla()  # break axex tiles :(
     subplt1.plot(y1)
     subplt2.clear()
     subplt2.plot(y2)
-
-    subplt1.set_title("microfon_1", fontsize=12)
-    subplt2.set_title("microfon_2: Reference", fontsize=12)
 
     # matplotlib: axes properties & function TODO:
     # subplt1.relim()
@@ -90,19 +89,7 @@ def doFFT(data, queue):
     ''' read data and perform real one dimensional fft
         return the transform magnitude
     '''
-    # -version for data = f.read()
-    # ypl = []
-    # lines = data.split('\n')
-    # for line in lines:
-    #    if len(line) > 1:
-    #         ypl.appeetup="import pyfftw; \
 
-    # -version for numpy fft and deque:
-    # ft = np.fft.fft(data)
-    # yar = asarray(ft, dtype=np.float16)
-    # queue.put(yar)
-
-    # -vesion for pyfftw and deque:
     # initialize empty output array (real -> complex fft)
     x = np.asarray(data, dtype=np.float32)
     input = pyfftw.empty_aligned(x.shape[0], dtype=np.float32)
