@@ -1,13 +1,13 @@
 import os
+import sys
 import numpy as np
 import random
 import tkinter as tk
+from tkinter import messagebox
 from tkinter import ttk
 from time import gmtime, strftime
 from pathlib import PurePath
-
-#  from PIL import ImageTk
-#  from collections import deque
+# from PIL import ImageTk
 
 import pyfftw
 from multiprocessing import Process, Queue
@@ -16,12 +16,14 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2TkAgg)
 
+#  -----------------------------------GLOBALS to set by user-------------------
+FREQUENCY = 10000  # of new samples per sec
+REFRESH_TIME = 0.5  # sec. ATTENTION! it is time between all func done ther job
+# TODO measure and aply to fft time vector *real* time!!
 #  -----------------------------------GLOBALS----------------------------------
 BITS = 16
-FREQUENCY = 10000  # of new samples per sec
-REFRESH_TIME = 1  # 1s
 XLIM_FFT = (1, FREQUENCY)
-YLIM_FFT = (0, FREQUENCY/2 + FREQUENCY/30)
+YLIM_FFT = (0, REFRESH_TIME*FREQUENCY/2 + REFRESH_TIME*FREQUENCY/30)
 XLIM_SAMPLE = (0, FREQUENCY*REFRESH_TIME)
 YLIM_SAMPLE = (0, 3.3)  # 3.3V signal max voltage
 RECORD_FLAG = False
@@ -30,23 +32,17 @@ FONT = ('Verdana', 12)
 # root of style (.)
     #  s = ttk.Style()
     #  s.configure('.', font=('Helvetica', 12))
-#  -----------------------------------VISUAL SETTINGS--------------------------
+#  -----------------------------------VISUAL & INIT SETTINGS-------------------
 
-use('TkAgg')  # mpl: set backend
+use('TkAgg')  # matplotlib: set backend
 style.use('seaborn-whitegrid')
-# bmh classic dark_background fivethirtyeight ggplot grayscale seaborn-white
-# seaborn-bright seaborn-colorblind seaborn-darkgrid seaborn-dark
-# seaborn-dark-palette seaborn-deep seaborn-muted seaborn-notebook seaborn-paper
-# seaborn-pastel seaborn-poster seaborn-talk seaborn-ticks seaborn-whitegrid
 
 fig = Figure(figsize=(5, 5), dpi=100)
 fig.subplots_adjust(bottom=0.15, top=0.92, hspace=.7)
-
 sample_graph = fig.add_subplot(2, 1, 1,
                                xlabel='time [ms]', ylabel='voltage',
                                xlim=XLIM_SAMPLE, ylim=YLIM_SAMPLE)
 sample_graph.set_title('time domain', fontsize=13)
-
 fft_graph = fig.add_subplot(2, 1, 2,
                             xlabel='frequency [Hz]', ylabel='FT magnitude',
                             xlim=XLIM_FFT, ylim=YLIM_FFT, xscale='log')
@@ -66,18 +62,18 @@ plot_data = np.empty([3, FREQUENCY*REFRESH_TIME], np.float32)
 
 
 class AcousticStand(tk.Tk):
-
+    ''' Mother class that keeps app overall settings and all frames to show
+    '''
     def __init__(self, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
 
         if os.name == "nt":  # windows
-            self.iconbitmap("AcousticStand.ico")  # check. If not try default=.
+            self.iconbitmap("AcousticStand.ico")
         else:
-            pass
             # line below calls similar func like last line here
-            #  self.iconbitmap("@AcS.xbm")  # b&white; overwrite below
-            #  icon = tk.PhotoImage(file='AcousticStand.gif')  # .gif colo64
-            #  self.tk.call('wm', 'iconphoto', self._w, icon)  # TODO: activate
+            self.iconbitmap("@AcS.xbm")  # black&white just in case; color below
+            icon = tk.PhotoImage(file='AcousticStand.gif')  # .gif colo64
+            self.tk.call('wm', 'iconphoto', self._w, icon)
 
         self.title("AcousticStand alpha")  # like: tk.Tk.wm_title(self, "title")
         self.geometry("1400x900")
@@ -88,9 +84,8 @@ class AcousticStand(tk.Tk):
         container["borderwidth"] = 2
         container["relief"] = "sunken"  # "raised" "solid" "ridge""groove"
 
-        self.frames = {}  # make list of my frames
-
-        for fr in (StartPage, GraphPage):
+        self.frames = {}  # make list of all frames
+        for fr in (InfoPage, GraphPage):
             frame = fr(container, self)
             self.frames[fr] = frame
             frame.grid(row=0, column=0, sticky="NSEW")
@@ -102,16 +97,13 @@ class AcousticStand(tk.Tk):
         frame.tkraise()
 
 
-class StartPage(tk.Frame):
-
+class InfoPage(tk.Frame):
+    ''' Page with official informations about project
+    '''
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
-        label = ttk.Label(self, text="Start Joda Page", font=FONT)
+        label = ttk.Label(self, text="Start Page... TODO: about", font=FONT)
         label.pack(padx=10, pady=10)
-        # now, lets display a image&text inside label TODO doesn't work
-        #  joda = ImageTk.PhotoImage(file="jodapng.png")
-        #  label["image"] = joda
-        #  label["compound"] = "top"  # posision of image against text
 
         button1 = ttk.Button(
             self, text="show GraphPage",
@@ -120,7 +112,8 @@ class StartPage(tk.Frame):
 
 
 class GraphPage(tk.Frame):
-
+    ''' Page in which canvas is drawn: sample graph and fft graph are shown.
+    '''
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
         label = tk.Label(self, text="Graph Page", font=FONT)
@@ -129,34 +122,32 @@ class GraphPage(tk.Frame):
         defaultbg = self.cget('bg')  # self -> from AcousticStand class
         fig.set_facecolor(defaultbg)
 
-        #  button_home = ttk.Button(
-            #  self, text="Back to Home",
-            #  command=lambda: controller.show_frame(StartPage))
-        #  button_home.pack(side=tk.BOTTOM)
+        button_home = ttk.Button(
+            self, text="About the project",
+            command=lambda: controller.show_frame(InfoPage))
+        button_home.pack(side=tk.BOTTOM)
 
         ttk_style = ttk.Style()
-        ttk_style.map('Mine.TButton'
-                      , relief=[('pressed', 'flat')]
-                      , background=[('pressed', '#ffebcd')]
-                      , foreground=[('active', 'red')]
+        ttk_style.map('Mine.TButton',
+                      relief=[('pressed', 'flat')],
+                      background=[('pressed', '#ffebcd')],
+                      foreground=[('active', 'red')],
                       )
 
         self.button_record = ttk.Button(self, width=14, text='Record data',
                                         style='Mine.TButton',
-                                        command=lambda: self.record_data())
+                                        command=lambda: self.call_record())
         self.button_record.pack(side=tk.BOTTOM)
-
-        # TODO try place here most of the code from the beggining (except fig)
 
         canvas = FigureCanvasTkAgg(fig, self)
         canvas.show()
-        canvas.get_tk_widget().pack(side=tk.BOTTOM)  # unwanted effect
+        canvas.get_tk_widget().pack(side=tk.BOTTOM)
 
         toolbar = NavigationToolbar2TkAgg(canvas, self)
         toolbar.update()
         canvas._tkcanvas.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-    def record_data(self):
+    def call_record(self):
         ''' toogle recording data to file
         '''
         global RECORD_FLAG
@@ -171,12 +162,11 @@ class GraphPage(tk.Frame):
 
 
 class MyFuncAnimation(animation.FuncAnimation):
-    '''
-    Unfortunately, it seems that the _blit_clear method of the Animation
+    ''' Helper class that overcome an animation bug.
+    It seems that the _blit_clear method of the Animation
     class contains an error in several matplotlib verions
-    That's why, I fork it here and insert the latest git version of
-    the function. '''
-
+    This is newer git version of the function.
+    '''
     def _blit_clear(self, artists, bg_cache):
         # Get a list of the axes that need clearing from the artists that
         # have been drawn. Grab the appropriate saved background from the
@@ -190,6 +180,13 @@ class MyFuncAnimation(animation.FuncAnimation):
 def init():
     ''' Initializtion function to animate refreshing only fft_lines
     develop: load random quatisized sample (see sample_base.py)
+
+    --> data structure:
+    figure_data is list of four Artists -> Line2D that will be plotting:
+    (samples and fft) for each microphone (measurement and reference).
+    So figure_data = [Line2DArtist]*4;
+    each Line2DArtist contains: (x[],y[]);
+    we need get_data() method to unpack that.
     '''
     global base_list
     with open('sample_base.txt', 'r') as g:
@@ -205,11 +202,11 @@ def init():
 def animate(i):
     ''' develop: generate sample data and pug it in Line2D ([x1,y1],[x2,y2]) tup
     Perform fft in separate processess and draw plots.
+    Perform data recording on demand (RECORD_FLAG).
     '''
-
     # random data
     global plot_data
-    for k in range(FREQUENCY*REFRESH_TIME):
+    for k in range(int(FREQUENCY*REFRESH_TIME)):
         randInt = random.randint(0, 2**BITS)
         plot_data[0, k] = (base_list[randInt-1])
         plot_data[2, k] = k  # x axes values
@@ -219,7 +216,7 @@ def animate(i):
     x = np.sin(2*np.pi*150*t) + np.sin(2*np.pi*100*t)
 
     sample_lines[0].set_data(plot_data[2], plot_data[0])
-    sample_lines[1].set_data([i for i in range(len(x))], x)
+    sample_lines[1].set_data([np.float32(i) for i in range(len(x))], x)
 
     q1 = Queue()
     q2 = Queue()
@@ -233,20 +230,18 @@ def animate(i):
     fft_lines[1].set_data(q2.get())
     figure_data = sample_lines + fft_lines
 
-    # TODO in nicer format
     data_file_name = strftime("%d.%m.%Y %H-%M-%S", gmtime())
     if RECORD_FLAG:
-        p3 = Process(target=write_data, name='writer',
+        p3 = Process(target=record_data, name='writer',
                      args=(data_file_name, figure_data))
         p3.start()
 
-    # actualize the iterable artist every step of animation
+    # returning figure_data actualize the iterable artist every step of anima.
     return figure_data
 
 
 def do_fft(data, queue):
-    '''
-    Read data and perform real one dimensional fft.
+    ''' Read data and perform real one dimensional fft.
     Returns the tuple of transform magnitude and frequency vector.
     '''
     x = np.asarray(data, dtype=np.float32)  # float16 is enough but not availab.
@@ -270,30 +265,49 @@ def do_fft(data, queue):
     queue.put((freq, magnitude))
 
 
-def write_data(filename, data, state=True):
-    '''write drawing data (samples and fft)
-    stop record data if state=False
+def record_data(filename, data):
+    '''Write drawing data (samples and fft)
+    activate using RECORD_FLAG boolean
     '''
     path = str(PurePath('data', filename))
+    row_data = []
+    #  --> 'unzip' data
+    for line2D in data:  # len(data)=4
+        tups = line2D.get_data()
+        for i in range(len(tups)):  # len(tups)=2
+            row_data.append(tups[i])
+    #  --> pad row_data with nothing, to obtain equall lists
+    longest_l = len(max(row_data, key=lambda l: len(l)))
+    for i in range(len(row_data)):
+        current_l = len(row_data[i])
+        if current_l < longest_l:
+            row_data[i] = np.lib.pad(row_data[i], (0, longest_l - current_l),
+                                     'constant', constant_values=np.nan)
+    array_data = np.array(row_data, dtype=np.float32)
+    #  --> write to file using nice slicing (writing row by row all columns)
     with open(path, 'x') as f:
-        number = 0
-        for line2D in data:
-            number += 1
-            f.write('\n\nPlot_line no: {} \n'.format(number))
-            data2D = line2D.get_data()
-            f.write('x axis now \n')
-            for i in data2D[0]:
-                f.write("".join((str(i), '\n')))
-            f.write('y axis now \n')
-            for i in data2D[1]:
-                f.write("".join((str(i), '\n')))
+        f.write("X Y ref_X ref_Y fft_X fft_Y ref_fft_X ref_fft_Y\n")
+        for item in range(len(array_data[0])):
+            f.write('\t\t'.join(map(str, array_data[:, item])))
+            f.write('\n')
 
 
 def main():
+    if REFRESH_TIME == 0:
+        messagebox.showerror("Error 101",
+                             "Set REFRESH_TIME>0")
+        sys.exit(1)
+    if REFRESH_TIME*FREQUENCY > 16300:  # TODO check for Raspb.Pi3
+        messagebox.showerror("Error 102",
+                             "Too big amount of data in sample. Set \
+                             FREQUENCY*REFRESH_TIME less than 16300")
+        sys.exit("Stack overflow")
     app = AcousticStand()
     ani = MyFuncAnimation(fig, animate, init_func=init,
                           interval=REFRESH_TIME*1000, blit=True)
-    ani.interval = 1001
+    ani.interval = REFRESH_TIME*1000
+
+    init()
     app.mainloop()
 
 if __name__ == "__main__":
