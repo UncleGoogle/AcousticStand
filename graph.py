@@ -3,12 +3,12 @@ import sys
 import numpy as np
 import random
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import ttk
-from time import gmtime, strftime
+from tkinter import ttk, messagebox
+from time import localtime, strftime
 from pathlib import PurePath
 # from PIL import ImageTk
 
+sys.path.append('/usr/local/lib/')  # to find proper original fftw
 import pyfftw
 from multiprocessing import Process, Queue
 from matplotlib import style, use, animation, ticker
@@ -16,10 +16,13 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2TkAgg)
 
+# TODO comming data can be lost when plot is drawing
+# Maybe use deque for storage queue data?
+# TODO (mid priority) btm active border - change it (ugly)
+
 #  -----------------------------------GLOBALS to set by user-------------------
 FREQUENCY = 10000  # of new samples per sec
 REFRESH_TIME = 0.5  # sec. ATTENTION! it is time between all func done ther job
-# TODO measure and aply to fft time vector *real* time!!
 #  -----------------------------------GLOBALS----------------------------------
 BITS = 16
 XLIM_FFT = (1, FREQUENCY)
@@ -28,7 +31,7 @@ XLIM_SAMPLE = (0, FREQUENCY*REFRESH_TIME)
 YLIM_SAMPLE = (0, 3.3)  # 3.3V signal max voltage
 RECORD_FLAG = False
 FONT = ('Verdana', 12)
-# TODO:
+# TODO: (low priority)
 # root of style (.)
     #  s = ttk.Style()
     #  s.configure('.', font=('Helvetica', 12))
@@ -58,7 +61,7 @@ sample_lines = sample_graph.plot([], [], 'g,', [], [], 'r-')
 fft_lines = fft_graph.plot([], [], 'g,', [], [], 'r-')
 
 base_list = []  # develop: to storage data from init (file)
-plot_data = np.empty([3, FREQUENCY*REFRESH_TIME], np.float32)
+plot_data = np.empty([3, int(FREQUENCY*REFRESH_TIME)], dtype=np.float32)
 
 
 class AcousticStand(tk.Tk):
@@ -230,7 +233,7 @@ def animate(i):
     fft_lines[1].set_data(q2.get())
     figure_data = sample_lines + fft_lines
 
-    data_file_name = strftime("%d.%m.%Y %H-%M-%S", gmtime())
+    data_file_name = strftime("AC_%d.%m.%Y_%H-%M-%S", localtime())
     if RECORD_FLAG:
         p3 = Process(target=record_data, name='writer',
                      args=(data_file_name, figure_data))
@@ -242,7 +245,7 @@ def animate(i):
 
 def do_fft(data, queue):
     ''' Read data and perform real one dimensional fft.
-    Returns the tuple of transform magnitude and frequency vector.
+    Returns the tuple consist of transform magnitude and frequency vector.
     '''
     x = np.asarray(data, dtype=np.float32)  # float16 is enough but not availab.
 
@@ -269,7 +272,6 @@ def record_data(filename, data):
     '''Write drawing data (samples and fft)
     activate using RECORD_FLAG boolean
     '''
-    path = str(PurePath('data', filename))
     row_data = []
     #  --> 'unzip' data
     for line2D in data:  # len(data)=4
@@ -285,11 +287,19 @@ def record_data(filename, data):
                                      'constant', constant_values=np.nan)
     array_data = np.array(row_data, dtype=np.float32)
     #  --> write to file using nice slicing (writing row by row all columns)
-    with open(path, 'x') as f:
-        f.write("X Y ref_X ref_Y fft_X fft_Y ref_fft_X ref_fft_Y\n")
-        for item in range(len(array_data[0])):
-            f.write('\t\t'.join(map(str, array_data[:, item])))
-            f.write('\n')
+
+    path = str(PurePath('data', filename))
+    try:
+        f = open(path, 'x')
+    except FileExistsError:
+        filename += '_n'
+        path = str(PurePath('data', filename))
+    else:
+        with f:
+            f.write("X Y ref_X ref_Y fft_X fft_Y ref_fft_X ref_fft_Y\n")
+            for item in range(len(array_data[0])):
+                f.write('\t\t'.join(map(str, array_data[:, item])))
+                f.write('\n')
 
 
 def main():
@@ -305,8 +315,7 @@ def main():
     app = AcousticStand()
     ani = MyFuncAnimation(fig, animate, init_func=init,
                           interval=REFRESH_TIME*1000, blit=True)
-    ani.interval = REFRESH_TIME*1000
-
+    ani.blit = True
     init()
     app.mainloop()
 
