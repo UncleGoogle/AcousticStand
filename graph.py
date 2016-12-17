@@ -1,184 +1,31 @@
 import os
 import sys
-import numpy as np
 import random
 import tkinter as tk
-from tkinter import ttk, messagebox
+import tkinter.messagebox
+import tkinter.ttk as ttk
 from time import localtime, strftime
 from pathlib import PurePath
+from multiprocessing import Process, Queue
+
+sys.path.append('/usr/local/lib/')  # to find proper original fftw on RaspPi
+# TODO append syspath outside the program:
+# add to ~/.profile file: export PYTHONPATH=$PYTHONPATH:/path/you/want/to/add
+import pyfftw
+import numpy as np
 # from PIL import ImageTk
 
-sys.path.append('/usr/local/lib/')  # to find proper original fftw
-import pyfftw
-from multiprocessing import Process, Queue
-from matplotlib import style, use, animation, ticker
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
-                                               NavigationToolbar2TkAgg)
-
-# TODO comming data can be lost when plot is drawing
-# Maybe use deque for storage queue data?
-# TODO (mid priority) btm active border - change it (ugly)
-
-#  -----------------------------------GLOBALS to set by user-------------------
-FREQUENCY = 10000  # of new samples per sec
-REFRESH_TIME = 0.5  # sec. ATTENTION! it is time between all func done ther job
-#  -----------------------------------GLOBALS----------------------------------
-BITS = 16
-XLIM_FFT = (1, FREQUENCY)
-YLIM_FFT = (0, REFRESH_TIME*FREQUENCY/2 + REFRESH_TIME*FREQUENCY/30)
-XLIM_SAMPLE = (0, FREQUENCY*REFRESH_TIME)
-YLIM_SAMPLE = (0, 3.3)  # 3.3V signal max voltage
-RECORD_FLAG = False
-FONT = ('Verdana', 12)
-# TODO: (low priority)
-# root of style (.)
-    #  s = ttk.Style()
-    #  s.configure('.', font=('Helvetica', 12))
-#  -----------------------------------VISUAL & INIT SETTINGS-------------------
-
-use('TkAgg')  # matplotlib: set backend
-style.use('seaborn-whitegrid')
-
-fig = Figure(figsize=(5, 5), dpi=100)
-fig.subplots_adjust(bottom=0.15, top=0.92, hspace=.7)
-sample_graph = fig.add_subplot(2, 1, 1,
-                               xlabel='time [ms]', ylabel='voltage',
-                               xlim=XLIM_SAMPLE, ylim=YLIM_SAMPLE)
-sample_graph.set_title('time domain', fontsize=13)
-fft_graph = fig.add_subplot(2, 1, 2,
-                            xlabel='frequency [Hz]', ylabel='FT magnitude',
-                            xlim=XLIM_FFT, ylim=YLIM_FFT, xscale='log')
-fft_graph.set_title('frequency domain', fontsize=13)
-fft_graph.xaxis.grid(True, which='major', linewidth=0.7, color='0.5')
-fft_graph.xaxis.grid(which='minor', linestyle='-', color='0.5')
-fft_graph.yaxis.grid(which='major', color='0.7')
-subs = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]  # ticks to show per decade
-fft_graph.xaxis.set_minor_locator(ticker.LogLocator(subs=subs))
-fft_graph.xaxis.set_major_formatter(ticker.LogFormatterMathtext(base=10.0,
-                                    labelOnlyBase=False))
-sample_lines = sample_graph.plot([], [], 'g,', [], [], 'r-')
-fft_lines = fft_graph.plot([], [], 'g,', [], [], 'r-')
-
-base_list = []  # develop: to storage data from init (file)
-plot_data = np.empty([3, int(FREQUENCY*REFRESH_TIME)], dtype=np.float32)
+import settings
+from my_animation import FuncAnimation
+from gui import AcousticStand
+import gui
 
 
-class AcousticStand(tk.Tk):
-    ''' Mother class that keeps app overall settings and all frames to show
-    '''
-    def __init__(self, *args, **kwargs):
-        tk.Tk.__init__(self, *args, **kwargs)
-
-        if os.name == "nt":  # windows
-            self.iconbitmap("AcousticStand.ico")
-        else:
-            # line below calls similar func like last line here
-            self.iconbitmap("@AcS.xbm")  # black&white just in case; color below
-            icon = tk.PhotoImage(file='AcousticStand.gif')  # .gif colo64
-            self.tk.call('wm', 'iconphoto', self._w, icon)
-
-        self.title("AcousticStand alpha")  # like: tk.Tk.wm_title(self, "title")
-        self.geometry("1400x900")
-        container = tk.Frame(self)
-        container.pack(side="top", fill="both", expand=True)
-        container.grid_rowconfigure(0, weight=1)
-        container.grid_columnconfigure(0, weight=1)
-        container["borderwidth"] = 2
-        container["relief"] = "sunken"  # "raised" "solid" "ridge""groove"
-
-        self.frames = {}  # make list of all frames
-        for fr in (InfoPage, GraphPage):
-            frame = fr(container, self)
-            self.frames[fr] = frame
-            frame.grid(row=0, column=0, sticky="NSEW")
-
-        self.show_frame(GraphPage)  # initial show
-
-    def show_frame(self, control):
-        frame = self.frames[control]
-        frame.tkraise()
-
-
-class InfoPage(tk.Frame):
-    ''' Page with official informations about project
-    '''
-    def __init__(self, parent, controller):
-        tk.Frame.__init__(self, parent)
-        label = ttk.Label(self, text="Start Page... TODO: about", font=FONT)
-        label.pack(padx=10, pady=10)
-
-        button1 = ttk.Button(
-            self, text="show GraphPage",
-            command=lambda: controller.show_frame(GraphPage))
-        button1.pack()
-
-
-class GraphPage(tk.Frame):
-    ''' Page in which canvas is drawn: sample graph and fft graph are shown.
-    '''
-    def __init__(self, parent, controller):
-        tk.Frame.__init__(self, parent)
-        label = tk.Label(self, text="Graph Page", font=FONT)
-        label.pack(pady=10, padx=10)
-
-        defaultbg = self.cget('bg')  # self -> from AcousticStand class
-        fig.set_facecolor(defaultbg)
-
-        button_home = ttk.Button(
-            self, text="About the project",
-            command=lambda: controller.show_frame(InfoPage))
-        button_home.pack(side=tk.BOTTOM)
-
-        ttk_style = ttk.Style()
-        ttk_style.map('Mine.TButton',
-                      relief=[('pressed', 'flat')],
-                      background=[('pressed', '#ffebcd')],
-                      foreground=[('active', 'red')],
-                      )
-
-        self.button_record = ttk.Button(self, width=14, text='Record data',
-                                        style='Mine.TButton',
-                                        command=lambda: self.call_record())
-        self.button_record.pack(side=tk.BOTTOM)
-
-        canvas = FigureCanvasTkAgg(fig, self)
-        canvas.show()
-        canvas.get_tk_widget().pack(side=tk.BOTTOM)
-
-        toolbar = NavigationToolbar2TkAgg(canvas, self)
-        toolbar.update()
-        canvas._tkcanvas.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
-
-    def call_record(self):
-        ''' toogle recording data to file
-        '''
-        global RECORD_FLAG
-        if not RECORD_FLAG:
-            RECORD_FLAG = True
-            self.button_record.state(('pressed',))
-            self.button_record['text'] = 'Recording...'
-
-        else:
-            RECORD_FLAG = False
-            self.button_record['text'] = 'Record data'
-
-
-class MyFuncAnimation(animation.FuncAnimation):
-    ''' Helper class that overcome an animation bug.
-    It seems that the _blit_clear method of the Animation
-    class contains an error in several matplotlib verions
-    This is newer git version of the function.
-    '''
-    def _blit_clear(self, artists, bg_cache):
-        # Get a list of the axes that need clearing from the artists that
-        # have been drawn. Grab the appropriate saved background from the
-        # cache and restore.
-        axes = set(a.axes for a in artists)
-        for a in axes:
-            if a in bg_cache:  # this is the previously missing line
-                a.figure.canvas.restore_region(bg_cache[a])
-
+# develop:
+# global base_list, plot_data
+base_list = []
+plot_data = np.empty([3, int(settings.FREQUENCY*settings.REFRESH_TIME)],
+                     dtype=np.float32)
 
 def init():
     ''' Initializtion function to animate refreshing only fft_lines
@@ -196,30 +43,35 @@ def init():
         gData = g.read()
         base_list = gData.split()
     for i in range(2):
-        sample_lines[i].set_data([], [])
-        fft_lines[i].set_data([], [])
-    figure_data = sample_lines + fft_lines
+        settings.sample_lines[i].set_data([], [])
+        settings.fft_lines[i].set_data([], [])
+    figure_data = settings.sample_lines + settings.fft_lines
+    # TODO: if you want write data in separate process:
+    # settings.record_flag = False
     return figure_data
 
 
 def animate(i):
     ''' develop: generate sample data and pug it in Line2D ([x1,y1],[x2,y2]) tup
     Perform fft in separate processess and draw plots.
-    Perform data recording on demand (RECORD_FLAG).
+    Perform data recording on demand (record_flag).
     '''
     # random data
     global plot_data
-    for k in range(int(FREQUENCY*REFRESH_TIME)):
-        randInt = random.randint(0, 2**BITS)
+    for k in range(int(settings.FREQUENCY*settings.REFRESH_TIME)):
+        randInt = random.randint(0, 2**settings.BITS)
         plot_data[0, k] = (base_list[randInt-1])
         plot_data[2, k] = k  # x axes values
 
     # some sin data
-    t = np.arange(0, REFRESH_TIME, 1/FREQUENCY, dtype=np.float32)
-    x = np.sin(2*np.pi*150*t) + np.sin(2*np.pi*100*t)
+    t = np.arange(0, settings.REFRESH_TIME, 1/settings.FREQUENCY,
+                  dtype=np.float32)
+    x = 1.6 + np.sin(np.pi*520*t) + 0.9*np.sin(200*np.pi*t) + \
+        0.5*np.cos(np.pi*500*t)
 
-    sample_lines[0].set_data(plot_data[2], plot_data[0])
-    sample_lines[1].set_data([np.float32(i) for i in range(len(x))], x)
+    # TODO ** develop: initialize below to show nothing as default
+    settings.sample_lines[0].set_data(plot_data[2], plot_data[0])
+    settings.sample_lines[1].set_data([np.float32(i) for i in range(len(x))], x)
 
     q1 = Queue()
     q2 = Queue()
@@ -229,12 +81,13 @@ def animate(i):
     p2.start()
     p1.join()  # wait untill process terminate
     p2.join()
-    fft_lines[0].set_data(q1.get())
-    fft_lines[1].set_data(q2.get())
-    figure_data = sample_lines + fft_lines
+    # TODO like todo **
+    settings.fft_lines[0].set_data(q1.get())
+    settings.fft_lines[1].set_data(q2.get())
+    figure_data = settings.sample_lines + settings.fft_lines
 
     data_file_name = strftime("AC_%d.%m.%Y_%H-%M-%S", localtime())
-    if RECORD_FLAG:
+    if settings.record_flag:
         p3 = Process(target=record_data, name='writer',
                      args=(data_file_name, figure_data))
         p3.start()
@@ -244,10 +97,11 @@ def animate(i):
 
 
 def do_fft(data, queue):
-    ''' Read data and perform real one dimensional fft.
+    ''' Read data and perform real one-dimensional fft.
     Returns the tuple consist of transform magnitude and frequency vector.
     '''
-    x = np.asarray(data, dtype=np.float32)  # float16 is enough but not availab.
+    x = np.asarray(data, dtype=np.float32)
+    # float16 would be enough but isn't available under Raspbarian OS.
 
     # initialize empty in/out-put arrays (real -> complex fft)
     input = pyfftw.empty_aligned(x.shape[0], dtype=np.float32)
@@ -255,7 +109,7 @@ def do_fft(data, queue):
     fft_obj = pyfftw.FFTW(input, output)  # creating object clean its arrays
 
     input[:] = x  # assign
-    fft_obj()  # __init__ has update_arrays(in, out) and execute()
+    fft_obj()  # __call__ has methods: update_arrays(in, out) and execute()
 
     magnitude = np.abs(output)
 
@@ -263,14 +117,14 @@ def do_fft(data, queue):
     freq = pyfftw.empty_aligned(output.shape[0], dtype=np.float32)
     olen = len(output)
     for i in range(olen):
-        freq[i] = i*FREQUENCY/olen
+        freq[i] = i*settings.FREQUENCY/olen
 
     queue.put((freq, magnitude))
 
 
 def record_data(filename, data):
     '''Write drawing data (samples and fft)
-    activate using RECORD_FLAG boolean
+    activate using record_flag boolean
     '''
     row_data = []
     #  --> 'unzip' data
@@ -286,8 +140,8 @@ def record_data(filename, data):
             row_data[i] = np.lib.pad(row_data[i], (0, longest_l - current_l),
                                      'constant', constant_values=np.nan)
     array_data = np.array(row_data, dtype=np.float32)
-    #  --> write to file using nice slicing (writing row by row all columns)
 
+    filename = filename + '.CSV'
     path = str(PurePath('data', filename))
     try:
         f = open(path, 'x')
@@ -296,27 +150,26 @@ def record_data(filename, data):
         path = str(PurePath('data', filename))
     else:
         with f:
-            f.write("X Y ref_X ref_Y fft_X fft_Y ref_fft_X ref_fft_Y\n")
+            #  --> write to file using slicing (writing row by row all columns)
+            f.write("X\tY\tref_X\tref_Y\tfft_X\tfft_Y\tref_fft_X\tref_fft_Y\n")
             for item in range(len(array_data[0])):
-                f.write('\t\t'.join(map(str, array_data[:, item])))
+                f.write('\t'.join(map(str, array_data[:, item])))
                 f.write('\n')
 
 
 def main():
-    if REFRESH_TIME == 0:
-        messagebox.showerror("Error 101",
-                             "Set REFRESH_TIME>0")
-        sys.exit(1)
-    if REFRESH_TIME*FREQUENCY > 16300:  # TODO check for Raspb.Pi3
-        messagebox.showerror("Error 102",
-                             "Too big amount of data in sample. Set \
-                             FREQUENCY*REFRESH_TIME less than 16300")
-        sys.exit("Stack overflow")
+    initial_popup = gui.Popup_settings()
+    initial_popup.mainloop()
+
+    settings.init()
+
     app = AcousticStand()
-    ani = MyFuncAnimation(fig, animate, init_func=init,
-                          interval=REFRESH_TIME*1000, blit=True)
+    ani = FuncAnimation(settings.fig, animate, init_func=init,
+                        interval=settings.REFRESH_TIME*1000, blit=True)
     ani.blit = True
-    init()
+
+    # TODO make gui independent on refresh time (another process/thread
+    # handles gui response)
     app.mainloop()
 
 if __name__ == "__main__":
