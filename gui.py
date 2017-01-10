@@ -106,8 +106,7 @@ class AcousticStand(tk.Tk):
         if os.name == "nt":  # windows
             self.iconbitmap("AcousticStand.ico")
         else:
-            # TODO: create transparent icon
-            icon = tk.PhotoImage(file='AcousticStand.gif')  # .gif colo64
+            icon = tk.PhotoImage(file='LOGO_yellow.gif')  # .gif colo64
             self.tk.call('wm', 'iconphoto', self._w, icon)
 
         self.title("AcousticStand alpha")  # like: tk.Tk.wm_title(self, "title")
